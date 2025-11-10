@@ -48,6 +48,7 @@ function createWindow() {
     height: 800,
     title: 'The EzGBP',
     icon: path.join(__dirname, 'icons', 'icon.png'),
+    show: true, // Show window immediately
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -58,8 +59,9 @@ function createWindow() {
 
   mainWindow.loadURL(START_URL);
 
-  // Explicitly show the window
+  // Ensure window is shown and focused
   mainWindow.show();
+  mainWindow.focus();
 
   // Handle new window requests (popups, OAuth, etc.)
   mainWindow.webContents.setWindowOpenHandler(({ url, disposition }) => {
@@ -314,14 +316,18 @@ function createApplicationMenu() {
   };
 
   // macOS specific menu adjustments
-  if (process.platform === 'darwin') {
+  const isMac = process.platform === 'darwin';
+  if (isMac) {
+    // Use role: 'appMenu' for macOS - this ensures it appears as the app name menu
     template.unshift({
-      label: app.getName(),
+      role: 'appMenu',
       submenu: [
         { role: 'about', label: 'About The EzGBP' },
         { type: 'separator' },
         {
-          label: 'Check for Updates',
+          id: 'checkForUpdates',
+          label: 'Check for Updates…',
+          enabled: true, // Keep it visible and enabled in both dev and prod
           click: checkForUpdatesHandler
         },
         { type: 'separator' },
@@ -349,6 +355,26 @@ function createApplicationMenu() {
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
     console.log('Application menu created successfully');
+    
+    // Diagnostic: verify menu structure
+    const appMenu = Menu.getApplicationMenu();
+    if (appMenu) {
+      const topLevelLabels = appMenu.items.map(i => i.label);
+      console.log('Top-level menu items:', topLevelLabels);
+      
+      if (isMac && appMenu.items.length > 0) {
+        const firstMenu = appMenu.items[0];
+        const firstSubmenuLabels = firstMenu.submenu?.items.map(i => i.label) || [];
+        console.log('First menu (appMenu) submenu items:', firstSubmenuLabels);
+        
+        // Verify "Check for Updates" is present
+        if (firstSubmenuLabels.includes('Check for Updates…')) {
+          console.log('✓ "Check for Updates" found in app menu');
+        } else {
+          console.warn('✗ "Check for Updates" NOT found in app menu');
+        }
+      }
+    }
   } catch (error) {
     console.error('Error creating application menu:', error);
   }
