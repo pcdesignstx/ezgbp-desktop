@@ -19,9 +19,9 @@ win:
 linux:
   target:
     - AppImage
-# Auto-updates disabled (wrapper app, updates rarely needed)
-# If you want to enable auto-updates later, uncomment and configure:
-# publish:
-#   - provider: generic
-#     url: https://YOUR_PROJECT_REF.supabase.co/storage/v1/object/public/desktop-releases
+# Auto-updates via GitHub Releases
+publish:
+  - provider: github
+    owner: pcdesignstx
+    repo: ezgbp-desktop
 

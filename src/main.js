@@ -210,26 +210,72 @@ function registerProtocol() {
   });
 }
 
-// ----- Auto-updates (disabled - wrapper app, updates rarely needed)
-// If you need to update the desktop app (bug fixes, Electron security updates, etc.):
-// 1. Make changes to src/main.js or other files
-// 2. Run: npm run build
-// 3. Install the new DMG
+// ----- Auto-updates
 function initAutoUpdater() {
-  // Auto-updates disabled - this is just a wrapper, web app updates automatically
-  // Uncomment below if you want to enable auto-updates later
-  /*
+  // Configure auto-updater
   autoUpdater.autoDownload = true;
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.autoInstallOnAppQuit = true;
 
-  autoUpdater.on('update-available', () => {
-    if (tray) tray.displayBalloon?.({ title: 'Update available', content: 'Downloading update…' });
+  // Check for updates on startup (after a short delay)
+  setTimeout(() => {
+    autoUpdater.checkForUpdatesAndNotify().catch(err => {
+      console.error('Error checking for updates:', err);
+    });
+  }, 3000);
+
+  // Check for updates every 4 hours
+  setInterval(() => {
+    autoUpdater.checkForUpdatesAndNotify().catch(err => {
+      console.error('Error checking for updates:', err);
+    });
+  }, 4 * 60 * 60 * 1000);
+
+  // Update available - downloading
+  autoUpdater.on('update-available', (info) => {
+    console.log('Update available:', info.version);
+    if (Notification.isSupported()) {
+      const notification = new Notification({
+        title: 'Update Available',
+        body: `Downloading version ${info.version}...`,
+        icon: path.join(__dirname, 'icons', 'icon.png'),
+        silent: false
+      });
+      notification.show();
+    }
   });
-  autoUpdater.on('update-downloaded', () => {
-    if (tray) tray.displayBalloon?.({ title: 'Update ready', content: 'Restarting to install…' });
-    autoUpdater.quitAndInstall();
+
+  // Update downloaded - ready to install
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('Update downloaded:', info.version);
+    if (Notification.isSupported()) {
+      const notification = new Notification({
+        title: 'Update Ready',
+        body: `Version ${info.version} is ready. The app will restart to install the update.`,
+        icon: path.join(__dirname, 'icons', 'icon.png'),
+        silent: false
+      });
+      notification.show();
+      notification.on('click', () => {
+        autoUpdater.quitAndInstall();
+      });
+    }
+    // Auto-install after 5 seconds if user doesn't click
+    setTimeout(() => {
+      autoUpdater.quitAndInstall();
+    }, 5000);
   });
-  */
+
+  // Update error
+  autoUpdater.on('error', (err) => {
+    console.error('Auto-updater error:', err);
+    // Don't show error notifications to users for network issues, etc.
+  });
+
+  // Download progress
+  autoUpdater.on('download-progress', (progressObj) => {
+    const percent = Math.round(progressObj.percent);
+    console.log(`Update download progress: ${percent}%`);
+  });
 }
 
 // ----- IPC handlers

@@ -10,11 +10,26 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 9 }
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
-      - run: pnpm install
+      - run: npm ci
+      - name: Generate macOS icon
+        run: |
+          mkdir -p /tmp/icon.iconset
+          sips -z 16 16 src/icons/icon.png --out /tmp/icon.iconset/icon_16x16.png
+          sips -z 32 32 src/icons/icon.png --out /tmp/icon.iconset/icon_16x16@2x.png
+          sips -z 32 32 src/icons/icon.png --out /tmp/icon.iconset/icon_32x32.png
+          sips -z 64 64 src/icons/icon.png --out /tmp/icon.iconset/icon_32x32@2x.png
+          sips -z 128 128 src/icons/icon.png --out /tmp/icon.iconset/icon_128x128.png
+          sips -z 256 256 src/icons/icon.png --out /tmp/icon.iconset/icon_128x128@2x.png
+          sips -z 256 256 src/icons/icon.png --out /tmp/icon.iconset/icon_256x256.png
+          sips -z 512 512 src/icons/icon.png --out /tmp/icon.iconset/icon_256x256@2x.png
+          sips -z 512 512 src/icons/icon.png --out /tmp/icon.iconset/icon_512x512.png
+          sips -z 1024 1024 src/icons/icon.png --out /tmp/icon.iconset/icon_512x512@2x.png
+          iconutil -c icns /tmp/icon.iconset -o src/icons/mac/icon.icns
+          rm -rf /tmp/icon.iconset
+      - name: Generate Windows icon
+        run: npx png2icons src/icons/icon.png src/icons/win/icon.ico -all && mv src/icons/win/icon.ico.ico src/icons/win/icon.ico || true
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Mac signing (optional)
@@ -23,5 +38,5 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-        run: pnpm release
+        run: npm run release
 
