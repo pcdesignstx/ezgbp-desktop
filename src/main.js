@@ -423,11 +423,26 @@ function initAutoUpdater() {
   // Update error
   autoUpdater.on('error', (err) => {
     console.error('Auto-updater error:', err);
+    console.error('Error details:', {
+      message: err.message,
+      stack: err.stack,
+      code: err.code,
+      name: err.name
+    });
     // Show error notification for debugging
     if (Notification.isSupported() && mainWindow) {
+      let errorMessage = err.message || 'Unknown error';
+      // Make error messages more user-friendly
+      if (err.message && err.message.includes('404')) {
+        errorMessage = 'Update server not found. The repository may be private or the release may not exist.';
+      } else if (err.message && err.message.includes('403')) {
+        errorMessage = 'Access denied. The repository may be private.';
+      } else if (err.message && err.message.includes('network') || err.message && err.message.includes('ENOTFOUND')) {
+        errorMessage = 'Network error. Please check your internet connection.';
+      }
       const notification = new Notification({
         title: 'Update Check Failed',
-        body: `Error: ${err.message || 'Unknown error'}`,
+        body: errorMessage,
         icon: path.join(__dirname, 'icons', 'icon.png'),
         silent: false
       });
