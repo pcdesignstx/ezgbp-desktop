@@ -217,50 +217,6 @@ function createApplicationMenu() {
       label: 'File',
       submenu: [
         {
-          label: 'Check for Updates',
-          click: () => {
-            if (Notification.isSupported() && mainWindow) {
-              const checkingNotification = new Notification({
-                title: 'Checking for Updates',
-                body: 'Please wait...',
-                icon: path.join(__dirname, 'icons', 'icon.png'),
-                silent: false
-              });
-              checkingNotification.show();
-            }
-
-            autoUpdater.checkForUpdates().then(result => {
-              if (result && result.updateInfo) {
-                // Update available - the update-available event will handle the notification
-                console.log('Update found:', result.updateInfo.version);
-              } else {
-                // No update available
-                if (Notification.isSupported() && mainWindow) {
-                  const notification = new Notification({
-                    title: 'Up to Date',
-                    body: `You're running the latest version (${app.getVersion()})`,
-                    icon: path.join(__dirname, 'icons', 'icon.png'),
-                    silent: false
-                  });
-                  notification.show();
-                }
-              }
-            }).catch(err => {
-              console.error('Error checking for updates:', err);
-              if (Notification.isSupported() && mainWindow) {
-                const notification = new Notification({
-                  title: 'Update Check Failed',
-                  body: `Error: ${err.message || 'Unable to check for updates'}`,
-                  icon: path.join(__dirname, 'icons', 'icon.png'),
-                  silent: false
-                });
-                notification.show();
-              }
-            });
-          }
-        },
-        { type: 'separator' },
-        {
           label: 'Quit',
           accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
           click: () => app.quit()
@@ -315,12 +271,59 @@ function createApplicationMenu() {
     }
   ];
 
+  // Function to handle check for updates
+  const checkForUpdatesHandler = () => {
+    if (Notification.isSupported() && mainWindow) {
+      const checkingNotification = new Notification({
+        title: 'Checking for Updates',
+        body: 'Please wait...',
+        icon: path.join(__dirname, 'icons', 'icon.png'),
+        silent: false
+      });
+      checkingNotification.show();
+    }
+
+    autoUpdater.checkForUpdates().then(result => {
+      if (result && result.updateInfo) {
+        // Update available - the update-available event will handle the notification
+        console.log('Update found:', result.updateInfo.version);
+      } else {
+        // No update available
+        if (Notification.isSupported() && mainWindow) {
+          const notification = new Notification({
+            title: 'Up to Date',
+            body: `You're running the latest version (${app.getVersion()})`,
+            icon: path.join(__dirname, 'icons', 'icon.png'),
+            silent: false
+          });
+          notification.show();
+        }
+      }
+    }).catch(err => {
+      console.error('Error checking for updates:', err);
+      if (Notification.isSupported() && mainWindow) {
+        const notification = new Notification({
+          title: 'Update Check Failed',
+          body: `Error: ${err.message || 'Unable to check for updates'}`,
+          icon: path.join(__dirname, 'icons', 'icon.png'),
+          silent: false
+        });
+        notification.show();
+      }
+    });
+  };
+
   // macOS specific menu adjustments
   if (process.platform === 'darwin') {
     template.unshift({
       label: app.getName(),
       submenu: [
         { role: 'about', label: 'About The EzGBP' },
+        { type: 'separator' },
+        {
+          label: 'Check for Updates',
+          click: checkForUpdatesHandler
+        },
         { type: 'separator' },
         { role: 'services', label: 'Services' },
         { type: 'separator' },
