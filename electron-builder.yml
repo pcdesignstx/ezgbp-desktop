@@ -1,0 +1,27 @@
+appId: com.theezgbp.desktop
+productName: The EzGBP
+files:
+  - "src/**/*"
+  - "package.json"
+extraResources: []
+asar: true
+directories:
+  buildResources: src/icons
+mac:
+  category: public.app-category.productivity
+  icon: src/icons/mac/icon.icns
+  target:
+    - dmg
+win:
+  target:
+    - nsis
+  icon: src/icons/win/icon.ico
+linux:
+  target:
+    - AppImage
+# Auto-updates disabled (wrapper app, updates rarely needed)
+# If you want to enable auto-updates later, uncomment and configure:
+# publish:
+#   - provider: generic
+#     url: https://YOUR_PROJECT_REF.supabase.co/storage/v1/object/public/desktop-releases
+
