@@ -342,8 +342,13 @@ function createApplicationMenu() {
     ];
   }
 
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
+  try {
+    const menu = Menu.buildFromTemplate(template);
+    Menu.setApplicationMenu(menu);
+    console.log('Application menu created successfully');
+  } catch (error) {
+    console.error('Error creating application menu:', error);
+  }
 }
 
 // ----- Auto-updates
