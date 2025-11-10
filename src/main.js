@@ -219,12 +219,38 @@ function createApplicationMenu() {
         {
           label: 'Check for Updates',
           click: () => {
-            autoUpdater.checkForUpdates().catch(err => {
+            if (Notification.isSupported() && mainWindow) {
+              const checkingNotification = new Notification({
+                title: 'Checking for Updates',
+                body: 'Please wait...',
+                icon: path.join(__dirname, 'icons', 'icon.png'),
+                silent: false
+              });
+              checkingNotification.show();
+            }
+
+            autoUpdater.checkForUpdates().then(result => {
+              if (result && result.updateInfo) {
+                // Update available - the update-available event will handle the notification
+                console.log('Update found:', result.updateInfo.version);
+              } else {
+                // No update available
+                if (Notification.isSupported() && mainWindow) {
+                  const notification = new Notification({
+                    title: 'Up to Date',
+                    body: `You're running the latest version (${app.getVersion()})`,
+                    icon: path.join(__dirname, 'icons', 'icon.png'),
+                    silent: false
+                  });
+                  notification.show();
+                }
+              }
+            }).catch(err => {
               console.error('Error checking for updates:', err);
               if (Notification.isSupported() && mainWindow) {
                 const notification = new Notification({
-                  title: 'Update Check',
-                  body: 'Unable to check for updates. Please try again later.',
+                  title: 'Update Check Failed',
+                  body: `Error: ${err.message || 'Unable to check for updates'}`,
                   icon: path.join(__dirname, 'icons', 'icon.png'),
                   silent: false
                 });
@@ -328,14 +354,28 @@ function initAutoUpdater() {
 
   // Check for updates on startup (after a short delay)
   setTimeout(() => {
-    autoUpdater.checkForUpdatesAndNotify().catch(err => {
+    console.log('Checking for updates...');
+    autoUpdater.checkForUpdatesAndNotify().then(result => {
+      if (result && result.updateInfo) {
+        console.log('Update check complete. Current version:', app.getVersion(), 'Latest version:', result.updateInfo.version);
+      } else {
+        console.log('No update available. Running latest version:', app.getVersion());
+      }
+    }).catch(err => {
       console.error('Error checking for updates:', err);
     });
   }, 3000);
 
   // Check for updates every 4 hours
   setInterval(() => {
-    autoUpdater.checkForUpdatesAndNotify().catch(err => {
+    console.log('Periodic update check...');
+    autoUpdater.checkForUpdatesAndNotify().then(result => {
+      if (result && result.updateInfo) {
+        console.log('Update check complete. Current version:', app.getVersion(), 'Latest version:', result.updateInfo.version);
+      } else {
+        console.log('No update available. Running latest version:', app.getVersion());
+      }
+    }).catch(err => {
       console.error('Error checking for updates:', err);
     });
   }, 4 * 60 * 60 * 1000);
@@ -375,10 +415,24 @@ function initAutoUpdater() {
     }, 5000);
   });
 
+  // Update not available (already on latest)
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('No update available. Current version:', app.getVersion(), 'Latest version:', info.version);
+  });
+
   // Update error
   autoUpdater.on('error', (err) => {
     console.error('Auto-updater error:', err);
-    // Don't show error notifications to users for network issues, etc.
+    // Show error notification for debugging
+    if (Notification.isSupported() && mainWindow) {
+      const notification = new Notification({
+        title: 'Update Check Failed',
+        body: `Error: ${err.message || 'Unknown error'}`,
+        icon: path.join(__dirname, 'icons', 'icon.png'),
+        silent: false
+      });
+      notification.show();
+    }
   });
 
   // Download progress
