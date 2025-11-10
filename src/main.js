@@ -1,6 +1,7 @@
-const { app, BrowserWindow, shell, protocol, ipcMain, Menu, Tray, nativeImage, Notification } = require('electron');
+const { app, BrowserWindow, shell, protocol, ipcMain, Menu, Tray, nativeImage, Notification, dialog } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
+const log = require('electron-log');
 
 const START_URL = process.env.ELECTRON_START_URL || 'https://app.theezgbp.com';
 const ALLOWED_HOST = new URL(START_URL).host; // app.theezgbp.com
@@ -273,46 +274,39 @@ function createApplicationMenu() {
     }
   ];
 
-  // Function to handle check for updates
-  const checkForUpdatesHandler = () => {
-    if (Notification.isSupported() && mainWindow) {
-      const checkingNotification = new Notification({
-        title: 'Checking for Updates',
-        body: 'Please wait...',
-        icon: path.join(__dirname, 'icons', 'icon.png'),
-        silent: false
+  // Function to handle manual check for updates
+  const checkForUpdatesHandler = async () => {
+    if (!app.isPackaged) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Update Check',
+        message: 'Updates are only available in the packaged application.',
+        detail: 'Please install the app from the DMG to enable auto-updates.'
       });
-      checkingNotification.show();
+      return;
     }
 
-    autoUpdater.checkForUpdates().then(result => {
-      if (result && result.updateInfo) {
-        // Update available - the update-available event will handle the notification
-        console.log('Update found:', result.updateInfo.version);
-      } else {
-        // No update available
-        if (Notification.isSupported() && mainWindow) {
-          const notification = new Notification({
-            title: 'Up to Date',
-            body: `You're running the latest version (${app.getVersion()})`,
-            icon: path.join(__dirname, 'icons', 'icon.png'),
-            silent: false
-          });
-          notification.show();
-        }
-      }
-    }).catch(err => {
-      console.error('Error checking for updates:', err);
-      if (Notification.isSupported() && mainWindow) {
-        const notification = new Notification({
-          title: 'Update Check Failed',
-          body: `Error: ${err.message || 'Unable to check for updates'}`,
-          icon: path.join(__dirname, 'icons', 'icon.png'),
-          silent: false
+    try {
+      log.info('Manual update check initiated');
+      const result = await autoUpdater.checkForUpdates();
+      
+      if (!result?.updateInfo) {
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: 'Up to Date',
+          message: `You are running the latest version (${app.getVersion()}).`
         });
-        notification.show();
       }
-    });
+      // If update is available, the 'update-available' event will handle the notification
+    } catch (err) {
+      log.error('Manual update check failed:', err);
+      dialog.showMessageBox(mainWindow, {
+        type: 'error',
+        title: 'Update Check Failed',
+        message: 'Unable to check for updates.',
+        detail: err.message || String(err)
+      });
+    }
   };
 
   // macOS specific menu adjustments
@@ -355,18 +349,18 @@ function createApplicationMenu() {
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
     console.log('Application menu created successfully');
-    
+
     // Diagnostic: verify menu structure
     const appMenu = Menu.getApplicationMenu();
     if (appMenu) {
       const topLevelLabels = appMenu.items.map(i => i.label);
       console.log('Top-level menu items:', topLevelLabels);
-      
+
       if (isMac && appMenu.items.length > 0) {
         const firstMenu = appMenu.items[0];
         const firstSubmenuLabels = firstMenu.submenu?.items.map(i => i.label) || [];
         console.log('First menu (appMenu) submenu items:', firstSubmenuLabels);
-        
+
         // Verify "Check for Updates" is present
         if (firstSubmenuLabels.includes('Check for Updates…')) {
           console.log('✓ "Check for Updates" found in app menu');
@@ -382,41 +376,28 @@ function createApplicationMenu() {
 
 // ----- Auto-updates
 function initAutoUpdater() {
+  // Only run auto-updater when packaged (not in dev mode)
+  if (!app.isPackaged) {
+    log.info('Auto-updater disabled: running in development mode');
+    return;
+  }
+
+  // Configure logging for auto-updater
+  autoUpdater.logger = log;
+  autoUpdater.logger.transports.file.level = 'info';
+  log.info('Auto-updater initialized for packaged app');
+
   // Configure auto-updater
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  // Check for updates on startup (after a short delay)
-  setTimeout(() => {
-    console.log('Checking for updates...');
-    autoUpdater.checkForUpdatesAndNotify().then(result => {
-      if (result && result.updateInfo) {
-        console.log('Update check complete. Current version:', app.getVersion(), 'Latest version:', result.updateInfo.version);
-      } else {
-        console.log('No update available. Running latest version:', app.getVersion());
-      }
-    }).catch(err => {
-      console.error('Error checking for updates:', err);
-    });
-  }, 3000);
+  // Event listeners with logging and notifications
+  autoUpdater.on('checking-for-update', () => {
+    log.info('Checking for update...');
+  });
 
-  // Check for updates every 4 hours
-  setInterval(() => {
-    console.log('Periodic update check...');
-    autoUpdater.checkForUpdatesAndNotify().then(result => {
-      if (result && result.updateInfo) {
-        console.log('Update check complete. Current version:', app.getVersion(), 'Latest version:', result.updateInfo.version);
-      } else {
-        console.log('No update available. Running latest version:', app.getVersion());
-      }
-    }).catch(err => {
-      console.error('Error checking for updates:', err);
-    });
-  }, 4 * 60 * 60 * 1000);
-
-  // Update available - downloading
   autoUpdater.on('update-available', (info) => {
-    console.log('Update available:', info.version);
+    log.info('Update available:', info.version);
     if (Notification.isSupported()) {
       const notification = new Notification({
         title: 'Update Available',
@@ -428,36 +409,13 @@ function initAutoUpdater() {
     }
   });
 
-  // Update downloaded - ready to install
-  autoUpdater.on('update-downloaded', (info) => {
-    console.log('Update downloaded:', info.version);
-    if (Notification.isSupported()) {
-      const notification = new Notification({
-        title: 'Update Ready',
-        body: `Version ${info.version} is ready. The app will restart to install the update.`,
-        icon: path.join(__dirname, 'icons', 'icon.png'),
-        silent: false
-      });
-      notification.show();
-      notification.on('click', () => {
-        autoUpdater.quitAndInstall();
-      });
-    }
-    // Auto-install after 5 seconds if user doesn't click
-    setTimeout(() => {
-      autoUpdater.quitAndInstall();
-    }, 5000);
-  });
-
-  // Update not available (already on latest)
   autoUpdater.on('update-not-available', (info) => {
-    console.log('No update available. Current version:', app.getVersion(), 'Latest version:', info.version);
+    log.info('Update not available. Running latest version:', info.version || app.getVersion());
   });
 
-  // Update error
   autoUpdater.on('error', (err) => {
-    console.error('Auto-updater error:', err);
-    console.error('Error details:', {
+    log.error('Auto-updater error:', err);
+    log.error('Error details:', {
       message: err.message,
       stack: err.stack,
       code: err.code,
@@ -484,11 +442,46 @@ function initAutoUpdater() {
     }
   });
 
-  // Download progress
   autoUpdater.on('download-progress', (progressObj) => {
     const percent = Math.round(progressObj.percent);
-    console.log(`Update download progress: ${percent}%`);
+    log.info(`Download progress: ${percent}%`);
   });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    log.info('Update downloaded:', info.version);
+    if (Notification.isSupported()) {
+      const notification = new Notification({
+        title: 'Update Ready',
+        body: `Version ${info.version} is ready. The app will restart to install the update.`,
+        icon: path.join(__dirname, 'icons', 'icon.png'),
+        silent: false
+      });
+      notification.show();
+      notification.on('click', () => {
+        autoUpdater.quitAndInstall();
+      });
+    }
+    // Auto-install after 5 seconds if user doesn't click
+    setTimeout(() => {
+      autoUpdater.quitAndInstall();
+    }, 5000);
+  });
+
+  // Check for updates on startup (after a short delay)
+  setTimeout(() => {
+    log.info('Performing initial update check...');
+    autoUpdater.checkForUpdatesAndNotify().catch(err => {
+      log.error('Initial update check failed:', err);
+    });
+  }, 3000);
+
+  // Check for updates every 4 hours
+  setInterval(() => {
+    log.info('Performing periodic update check...');
+    autoUpdater.checkForUpdatesAndNotify().catch(err => {
+      log.error('Periodic update check failed:', err);
+    });
+  }, 4 * 60 * 60 * 1000);
 }
 
 // ----- IPC handlers
