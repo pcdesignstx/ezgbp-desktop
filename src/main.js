@@ -44,12 +44,16 @@ let tray;
 
 // ----- Create main window
 function createWindow() {
+  const startTime = Date.now();
+  console.log('[Startup] Creating main window...');
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     title: 'The EzGBP',
     icon: path.join(__dirname, 'icons', 'icon.png'),
     show: true, // Show window immediately
+    backgroundColor: '#0b0f1a', // Dark background to match theme while loading
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -58,11 +62,24 @@ function createWindow() {
     }
   });
 
-  mainWindow.loadURL(START_URL);
+  console.log(`[Startup] Window created in ${Date.now() - startTime}ms`);
 
-  // Ensure window is shown and focused
+  // Load URL - window is already visible
+  mainWindow.loadURL(START_URL);
+  console.log(`[Startup] Loading URL: ${START_URL}`);
+
+  // Ensure window is shown and focused (redundant but safe)
   mainWindow.show();
   mainWindow.focus();
+
+  // Log when content finishes loading
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log(`[Startup] Content loaded in ${Date.now() - startTime}ms`);
+  });
+
+  mainWindow.on('show', () => {
+    console.log(`[Startup] Window shown in ${Date.now() - startTime}ms`);
+  });
 
   // Handle new window requests (popups, OAuth, etc.)
   mainWindow.webContents.setWindowOpenHandler(({ url, disposition }) => {
@@ -181,11 +198,12 @@ function createTray() {
 }
 
 // ----- Deep link protocol: ezgbp://...
-function registerProtocol() {
-  protocol.registerSchemesAsPrivileged([
-    { scheme: 'ezgbp', privileges: { standard: true, secure: true, supportFetchAPI: true } }
-  ]);
+// This MUST be called before app.whenReady()
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'ezgbp', privileges: { standard: true, secure: true, supportFetchAPI: true } }
+]);
 
+function setupProtocolHandlers() {
   // macOS handler
   app.setAsDefaultProtocolClient('ezgbp');
 
@@ -289,7 +307,7 @@ function createApplicationMenu() {
     try {
       log.info('Manual update check initiated');
       const result = await autoUpdater.checkForUpdates();
-      
+
       if (!result?.updateInfo) {
         dialog.showMessageBox(mainWindow, {
           type: 'info',
@@ -514,14 +532,20 @@ ipcMain.handle('show-notification', (event, { title, body, icon }) => {
 });
 
 // ----- App lifecycle
+const appStartTime = Date.now();
+app.on('ready', () => {
+  console.log(`[Startup] App ready in ${Date.now() - appStartTime}ms`);
+});
+
 app.whenReady().then(() => {
   try {
-    registerProtocol();
+    console.log('[Startup] Initializing app components...');
+    setupProtocolHandlers();
     createApplicationMenu();
     createWindow();
     createTray();
     initAutoUpdater();
-    console.log('App initialized successfully');
+    console.log(`[Startup] App initialized successfully in ${Date.now() - appStartTime}ms`);
   } catch (error) {
     console.error('Error during app initialization:', error);
   }
