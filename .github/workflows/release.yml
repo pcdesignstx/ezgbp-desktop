@@ -1,12 +1,16 @@
-name: Build & Release
+name: Build & Publish (macOS)
 
 on:
   push:
     tags:
-      - "v*"
+      - "v*"  # build on tag push
+  workflow_dispatch:
+
+permissions:
+  contents: write  # required to create releases & upload assets
 
 jobs:
-  release:
+  build:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,9 +102,10 @@ jobs:
           fi
           echo "Icon files verified successfully"
           ls -lh src/icons/mac/icon.icns
-      - name: Build and publish release
+      - name: Build & Publish with electron-builder
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Prefer GH_TOKEN PAT if set, otherwise use GitHub's built-in token
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
           # Mac signing (optional - only set if secrets exist)
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -112,5 +117,6 @@ jobs:
           echo "Working directory: $(pwd)"
           echo "Icon file check:"
           ls -lh src/icons/mac/icon.icns || echo "WARNING: Icon file not found"
-          npm run release
+          echo "Using GH_TOKEN: ${GH_TOKEN:0:10}..." # Show first 10 chars for debugging (don't show full token)
+          npx electron-builder --publish always
 
