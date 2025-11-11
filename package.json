@@ -1,6 +1,6 @@
 {
   "name": "ezgbp-desktop",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
   "description": "Desktop wrapper for The EzGBP",
   "license": "UNLICENSED",
@@ -9,7 +9,7 @@
     "dev": "cross-env ELECTRON_START_URL=${ELECTRON_START_URL:-https://app.theezgbp.com} electron .",
     "build": "electron-builder",
     "pack": "electron-builder --dir",
-    "release": "electron-builder --publish always"
+    "release": "dotenv -e .env -- electron-builder --publish always"
   },
   "dependencies": {
     "electron-log": "^5.4.3",
@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "cross-env": "^7.0.3",
+    "dotenv-cli": "^11.0.0",
     "electron": "^32.2.0",
     "electron-builder": "^24.13.3",
     "png2icons": "^2.0.1"

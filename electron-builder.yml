@@ -24,6 +24,7 @@ publish:
   - provider: github
     owner: pcdesignstx
     repo: ezgbp-desktop
+    releaseType: release  # ensures 'Published', not draft
     # For private repos, you may need to set private: true
     # But making the repo public is recommended for auto-updates
 

@@ -405,9 +405,27 @@ function initAutoUpdater() {
   autoUpdater.logger.transports.file.level = 'info';
   log.info('Auto-updater initialized for packaged app');
 
+  // For private repos: set GitHub token if available
+  // Store GH_TOKEN in environment (via CI/CD or .env) - never hard-code
+  if (process.env.GH_TOKEN) {
+    autoUpdater.requestHeaders = {
+      Authorization: `token ${process.env.GH_TOKEN}`
+    };
+    log.info('GitHub token configured for private repo access');
+  }
+
   // Configure auto-updater
+  // Note: Provider is auto-detected from electron-builder.yml publish config
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+
+  // Log the configured update server for debugging
+  log.info('Update server configured:', {
+    provider: 'github',
+    owner: 'pcdesignstx',
+    repo: 'ezgbp-desktop',
+    version: app.getVersion()
+  });
 
   // Event listeners with logging and notifications
   autoUpdater.on('checking-for-update', () => {
@@ -437,17 +455,24 @@ function initAutoUpdater() {
       message: err.message,
       stack: err.stack,
       code: err.code,
-      name: err.name
+      name: err.name,
+      statusCode: err.statusCode
     });
-    // Show error notification for debugging
-    if (Notification.isSupported() && mainWindow) {
+
+    // Only show notifications for critical errors, not expected ones like 406
+    // 406 errors are handled gracefully by safeCheckForUpdates and logged
+    const isExpectedError = err.statusCode === 406 ||
+      (err.message && err.message.includes('406')) ||
+      (err.message && err.message.includes('Unable to find latest version'));
+
+    if (!isExpectedError && Notification.isSupported() && mainWindow) {
       let errorMessage = err.message || 'Unknown error';
       // Make error messages more user-friendly
-      if (err.message && err.message.includes('404')) {
+      if (err.message && (err.message.includes('404') || err.statusCode === 404)) {
         errorMessage = 'Update server not found. The repository may be private or the release may not exist.';
-      } else if (err.message && err.message.includes('403')) {
+      } else if (err.message && (err.message.includes('403') || err.statusCode === 403)) {
         errorMessage = 'Access denied. The repository may be private.';
-      } else if (err.message && err.message.includes('network') || err.message && err.message.includes('ENOTFOUND')) {
+      } else if (err.message && (err.message.includes('network') || err.message && err.message.includes('ENOTFOUND'))) {
         errorMessage = 'Network error. Please check your internet connection.';
       }
       const notification = new Notification({
@@ -485,20 +510,27 @@ function initAutoUpdater() {
     }, 5000);
   });
 
-  // Check for updates on startup (after a short delay)
+  // Safe update check function (defensive error handling)
+  async function safeCheckForUpdates() {
+    try {
+      log.info('Checking for updates...');
+      await autoUpdater.checkForUpdates();
+    } catch (e) {
+      // Log but don't crash - GitHub hiccups shouldn't break the app
+      log.warn('Auto-update check failed (non-fatal):', e?.message || e);
+      // Don't show notification for expected errors (like 406) to avoid annoying users
+      // The error handler above will show notifications for critical issues
+    }
+  }
+
+  // Check for updates on startup (after a short delay to ensure window is visible)
   setTimeout(() => {
-    log.info('Performing initial update check...');
-    autoUpdater.checkForUpdatesAndNotify().catch(err => {
-      log.error('Initial update check failed:', err);
-    });
+    safeCheckForUpdates();
   }, 3000);
 
   // Check for updates every 4 hours
   setInterval(() => {
-    log.info('Performing periodic update check...');
-    autoUpdater.checkForUpdatesAndNotify().catch(err => {
-      log.error('Periodic update check failed:', err);
-    });
+    safeCheckForUpdates();
   }, 4 * 60 * 60 * 1000);
 }
 
