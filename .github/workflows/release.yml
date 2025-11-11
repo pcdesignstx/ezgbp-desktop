@@ -54,21 +54,50 @@ jobs:
           # Generate ICNS file - iconutil needs to be run from the directory containing the iconset
           ICONSET_PARENT="$(dirname "$ICONSET_DIR")"
           ICONSET_NAME="$(basename "$ICONSET_DIR")"
-          OUTPUT_ICNS="$(pwd)/src/icons/mac/icon.icns"
+          REPO_ROOT="$(pwd)"
+          OUTPUT_ICNS="$REPO_ROOT/src/icons/mac/icon.icns"
           
+          echo "Changing to $ICONSET_PARENT to run iconutil"
           cd "$ICONSET_PARENT"
-          iconutil -c icns "$ICONSET_NAME" -o "$OUTPUT_ICNS"
+          
+          echo "Running: iconutil -c icns $ICONSET_NAME -o $OUTPUT_ICNS"
+          if ! iconutil -c icns "$ICONSET_NAME" -o "$OUTPUT_ICNS"; then
+            echo "iconutil failed with exit code $?"
+            echo "Iconset directory contents:"
+            ls -la "$ICONSET_DIR"
+            exit 1
+          fi
+          
+          # Return to repo root
+          cd "$REPO_ROOT"
           
           # Verify ICNS was created
           if [ ! -f "$OUTPUT_ICNS" ]; then
             echo "Error: icon.icns was not created at $OUTPUT_ICNS"
+            echo "Current directory: $(pwd)"
+            echo "Files in src/icons/mac:"
+            ls -la src/icons/mac/ || echo "Directory does not exist"
             exit 1
           fi
           
           echo "Icon generated successfully: $OUTPUT_ICNS"
+          echo "File size: $(ls -lh "$OUTPUT_ICNS" | awk '{print $5}')"
           rm -rf "$ICONSET_PARENT"
       - name: Generate Windows icon
         run: npx png2icons src/icons/icon.png src/icons/win/icon.ico -all && mv src/icons/win/icon.ico.ico src/icons/win/icon.ico || true
+      - name: Verify icon files exist
+        run: |
+          echo "Verifying required icon files..."
+          if [ ! -f src/icons/mac/icon.icns ]; then
+            echo "ERROR: src/icons/mac/icon.icns does not exist!"
+            ls -la src/icons/mac/ || echo "src/icons/mac directory does not exist"
+            exit 1
+          fi
+          if [ ! -f src/icons/win/icon.ico ]; then
+            echo "WARNING: src/icons/win/icon.ico does not exist (non-fatal)"
+          fi
+          echo "Icon files verified successfully"
+          ls -lh src/icons/mac/icon.icns
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Mac signing (optional)
