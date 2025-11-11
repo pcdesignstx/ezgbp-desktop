@@ -15,19 +15,58 @@ jobs:
       - run: npm ci
       - name: Generate macOS icon
         run: |
-          mkdir -p /tmp/icon.iconset
-          sips -z 16 16 src/icons/icon.png --out /tmp/icon.iconset/icon_16x16.png
-          sips -z 32 32 src/icons/icon.png --out /tmp/icon.iconset/icon_16x16@2x.png
-          sips -z 32 32 src/icons/icon.png --out /tmp/icon.iconset/icon_32x32.png
-          sips -z 64 64 src/icons/icon.png --out /tmp/icon.iconset/icon_32x32@2x.png
-          sips -z 128 128 src/icons/icon.png --out /tmp/icon.iconset/icon_128x128.png
-          sips -z 256 256 src/icons/icon.png --out /tmp/icon.iconset/icon_128x128@2x.png
-          sips -z 256 256 src/icons/icon.png --out /tmp/icon.iconset/icon_256x256.png
-          sips -z 512 512 src/icons/icon.png --out /tmp/icon.iconset/icon_256x256@2x.png
-          sips -z 512 512 src/icons/icon.png --out /tmp/icon.iconset/icon_512x512.png
-          sips -z 1024 1024 src/icons/icon.png --out /tmp/icon.iconset/icon_512x512@2x.png
-          iconutil -c icns /tmp/icon.iconset -o src/icons/mac/icon.icns
-          rm -rf /tmp/icon.iconset
+          mkdir -p src/icons/mac
+          # Skip if icon already exists
+          if [ -f src/icons/mac/icon.icns ]; then
+            echo "Icon already exists, skipping generation"
+            exit 0
+          fi
+          
+          # Create iconset in a temporary location
+          ICONSET_DIR="$(mktemp -d)/icon.iconset"
+          mkdir -p "$ICONSET_DIR"
+          
+          echo "Generating icon sizes in $ICONSET_DIR"
+          
+          # Generate all required icon sizes
+          sips -z 16 16 src/icons/icon.png --out "$ICONSET_DIR/icon_16x16.png"
+          sips -z 32 32 src/icons/icon.png --out "$ICONSET_DIR/icon_16x16@2x.png"
+          sips -z 32 32 src/icons/icon.png --out "$ICONSET_DIR/icon_32x32.png"
+          sips -z 64 64 src/icons/icon.png --out "$ICONSET_DIR/icon_32x32@2x.png"
+          sips -z 128 128 src/icons/icon.png --out "$ICONSET_DIR/icon_128x128.png"
+          sips -z 256 256 src/icons/icon.png --out "$ICONSET_DIR/icon_128x128@2x.png"
+          sips -z 256 256 src/icons/icon.png --out "$ICONSET_DIR/icon_256x256.png"
+          sips -z 512 512 src/icons/icon.png --out "$ICONSET_DIR/icon_256x256@2x.png"
+          sips -z 512 512 src/icons/icon.png --out "$ICONSET_DIR/icon_512x512.png"
+          sips -z 1024 1024 src/icons/icon.png --out "$ICONSET_DIR/icon_512x512@2x.png"
+          
+          # Verify all files were created
+          echo "Verifying icon files..."
+          ls -la "$ICONSET_DIR"
+          
+          REQUIRED_COUNT=10
+          ACTUAL_COUNT=$(ls -1 "$ICONSET_DIR"/*.png 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$ACTUAL_COUNT" -ne "$REQUIRED_COUNT" ]; then
+            echo "Error: Expected $REQUIRED_COUNT icon files, found $ACTUAL_COUNT"
+            exit 1
+          fi
+          
+          # Generate ICNS file - iconutil needs to be run from the directory containing the iconset
+          ICONSET_PARENT="$(dirname "$ICONSET_DIR")"
+          ICONSET_NAME="$(basename "$ICONSET_DIR")"
+          OUTPUT_ICNS="$(pwd)/src/icons/mac/icon.icns"
+          
+          cd "$ICONSET_PARENT"
+          iconutil -c icns "$ICONSET_NAME" -o "$OUTPUT_ICNS"
+          
+          # Verify ICNS was created
+          if [ ! -f "$OUTPUT_ICNS" ]; then
+            echo "Error: icon.icns was not created at $OUTPUT_ICNS"
+            exit 1
+          fi
+          
+          echo "Icon generated successfully: $OUTPUT_ICNS"
+          rm -rf "$ICONSET_PARENT"
       - name: Generate Windows icon
         run: npx png2icons src/icons/icon.png src/icons/win/icon.ico -all && mv src/icons/win/icon.ico.ico src/icons/win/icon.ico || true
       - env:
