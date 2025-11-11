@@ -98,13 +98,19 @@ jobs:
           fi
           echo "Icon files verified successfully"
           ls -lh src/icons/mac/icon.icns
-      - env:
+      - name: Build and publish release
+        env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Mac signing (optional)
+          # Mac signing (optional - only set if secrets exist)
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-        run: npm run release
+          # Only set CSC_LINK if it's actually a file path, not a directory
+          # If CSC_LINK is not set or invalid, electron-builder will skip signing
+        run: |
+          echo "Starting build and release..."
+          echo "Working directory: $(pwd)"
+          echo "Icon file check:"
+          ls -lh src/icons/mac/icon.icns || echo "WARNING: Icon file not found"
+          npm run release
 
