@@ -41,6 +41,7 @@ function isAllowedDomain(url) {
 
 let mainWindow;
 let tray;
+let isManualCheck = false; // Track if this is a manual check (to show notifications)
 
 // ----- Create main window
 function createWindow() {
@@ -305,25 +306,55 @@ function createApplicationMenu() {
     }
 
     try {
+      isManualCheck = true;
       log.info('Manual update check initiated');
+      
+      // Show notification that check is starting
+      if (Notification.isSupported()) {
+        const notification = new Notification({
+          title: 'Checking for Updates',
+          body: 'Looking for the latest version...',
+          icon: path.join(__dirname, 'icons', 'icon.png'),
+          silent: false
+        });
+        notification.show();
+      }
+
       const result = await autoUpdater.checkForUpdates();
 
+      // If no update info returned and no update-available event fired,
+      // show that we're up to date
       if (!result?.updateInfo) {
-        dialog.showMessageBox(mainWindow, {
-          type: 'info',
-          title: 'Up to Date',
-          message: `You are running the latest version (${app.getVersion()}).`
-        });
+        // Wait a moment to see if update-available event fires
+        setTimeout(() => {
+          if (Notification.isSupported()) {
+            const notification = new Notification({
+              title: 'Up to Date',
+              body: `You are running the latest version (${app.getVersion()}).`,
+              icon: path.join(__dirname, 'icons', 'icon.png'),
+              silent: false
+            });
+            notification.show();
+          }
+        }, 500);
       }
       // If update is available, the 'update-available' event will handle the notification
     } catch (err) {
       log.error('Manual update check failed:', err);
-      dialog.showMessageBox(mainWindow, {
-        type: 'error',
-        title: 'Update Check Failed',
-        message: 'Unable to check for updates.',
-        detail: err.message || String(err)
-      });
+      if (Notification.isSupported()) {
+        const notification = new Notification({
+          title: 'Update Check Failed',
+          body: err.message || 'Unable to check for updates.',
+          icon: path.join(__dirname, 'icons', 'icon.png'),
+          silent: false
+        });
+        notification.show();
+      }
+    } finally {
+      // Reset after a delay to allow events to fire
+      setTimeout(() => {
+        isManualCheck = false;
+      }, 2000);
     }
   };
 
@@ -431,6 +462,16 @@ function initAutoUpdater() {
   // Event listeners with logging and notifications
   autoUpdater.on('checking-for-update', () => {
     log.info('Checking for update...');
+    // Show notification for manual checks
+    if (isManualCheck && Notification.isSupported()) {
+      const notification = new Notification({
+        title: 'Checking for Updates',
+        body: 'Looking for the latest version...',
+        icon: path.join(__dirname, 'icons', 'icon.png'),
+        silent: false
+      });
+      notification.show();
+    }
   });
 
   autoUpdater.on('update-available', (info) => {
@@ -448,6 +489,16 @@ function initAutoUpdater() {
 
   autoUpdater.on('update-not-available', (info) => {
     log.info('Update not available. Running latest version:', info.version || app.getVersion());
+    // Show notification for manual checks
+    if (isManualCheck && Notification.isSupported()) {
+      const notification = new Notification({
+        title: 'Up to Date',
+        body: `You are running the latest version (${app.getVersion()}).`,
+        icon: path.join(__dirname, 'icons', 'icon.png'),
+        silent: false
+      });
+      notification.show();
+    }
   });
 
   autoUpdater.on('error', (err) => {
