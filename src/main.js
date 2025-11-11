@@ -426,6 +426,7 @@ function initAutoUpdater() {
     repo: 'ezgbp-desktop',
     version: app.getVersion()
   });
+  log.info('Auto-update system ready - will check for updates on startup and every 4 hours');
 
   // Event listeners with logging and notifications
   autoUpdater.on('checking-for-update', () => {
