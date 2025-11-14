@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, protocol, ipcMain, Menu, Tray, nativeImage, Notification, dialog } = require('electron');
+const { app, BrowserWindow, shell, protocol, ipcMain, Menu, Tray, nativeImage, Notification, dialog, session } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
@@ -82,9 +82,58 @@ function createWindow() {
     console.log(`[Startup] Window shown in ${Date.now() - startTime}ms`);
   });
 
-  // Handle new window requests (popups, OAuth, etc.)
+  // Intercept download requests before they navigate
+  mainWindow.webContents.session.webRequest.onBeforeRequest((details, callback) => {
+    const url = details.url;
+    
+    // Check if this looks like a download request
+    if (url.endsWith('.zip') || url.includes('ezgbp-plugin') || url.includes('plugin.zip') || 
+        (url.includes('download') && (url.includes('.zip') || details.requestHeaders['content-type']?.includes('zip')))) {
+      console.log('[Download] Intercepted download request:', url);
+      // Let it proceed - the will-download handler will catch it
+      callback({});
+      return;
+    }
+    
+    callback({});
+  }, { urls: ['*://*/*'] });
+
+  // Log failed resource loads (like broken images)
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame && validatedURL) {
+      // This is likely a resource (image, CSS, etc.) that failed to load
+      console.warn(`[Resource Load Failed] ${errorCode}: ${errorDescription} - ${validatedURL}`);
+    } else if (isMainFrame) {
+      // Main frame failed to load
+      console.error(`[Page Load Failed] ${errorCode}: ${errorDescription} - ${validatedURL}`);
+      // If it's a 404 and looks like a download URL, log it specifically
+      if (errorCode === -105 && (validatedURL.includes('.zip') || validatedURL.includes('download') || validatedURL.includes('plugin'))) {
+        console.error(`[Download Error] File not found (404): ${validatedURL}`);
+        console.error(`[Download Error] This suggests the download URL is incorrect or the file doesn't exist on the server.`);
+        // Show user-friendly error
+        if (Notification.isSupported()) {
+          const notification = new Notification({
+            title: 'Download Failed',
+            body: 'The file you tried to download was not found. Please check the download link.',
+            icon: path.join(__dirname, 'icons', 'icon.png'),
+            silent: false
+          });
+          notification.show();
+        }
+      }
+    }
+  });
+
+  // Handle new window requests (popups, OAuth, downloads, etc.)
   mainWindow.webContents.setWindowOpenHandler(({ url, disposition }) => {
     console.log('Window open request:', url, disposition);
+
+    // Allow ZIP file downloads - let them proceed normally
+    if (url.endsWith('.zip') || url.includes('ezgbp-plugin') || url.includes('plugin.zip') || url.includes('download') || url.includes('.zip?')) {
+      console.log('[Download] Allowing download via window open:', url);
+      // Don't create a new window, let the download proceed in the current context
+      return { action: 'allow' }; // Allow the download to proceed
+    }
 
     // Always create our own window for OAuth flows - never use system browser
     if (isAllowedDomain(url)) {
@@ -153,9 +202,20 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  // Handle navigation - allow OAuth flows but block other external navigation
+  // Handle navigation - allow OAuth flows, downloads, but block other external navigation
   mainWindow.webContents.on('will-navigate', (e, url) => {
+    console.log('[Navigation] will-navigate to:', url);
+    
+    // Allow ZIP file downloads and plugin downloads
+    if (url.endsWith('.zip') || url.includes('ezgbp-plugin') || url.includes('plugin.zip') || url.includes('download') || url.includes('.zip?')) {
+      console.log('[Download] Allowing download via navigation:', url);
+      // Allow the download to proceed - Electron's download handler will catch it
+      // Don't prevent default, let it navigate/trigger download
+      return;
+    }
+    
     if (!isAllowedDomain(url)) {
+      console.log('[Navigation] Blocking external navigation:', url);
       e.preventDefault();
       // Only open in browser if it's not an OAuth flow
       shell.openExternal(url);
@@ -308,7 +368,7 @@ function createApplicationMenu() {
     try {
       isManualCheck = true;
       log.info('Manual update check initiated');
-      
+
       // Show notification that check is starting
       if (Notification.isSupported()) {
         const notification = new Notification({
@@ -615,6 +675,60 @@ ipcMain.handle('show-notification', (event, { title, body, icon }) => {
   return { success: true };
 });
 
+// ----- Download handling
+function setupDownloadHandler() {
+  session.defaultSession.on('will-download', (event, item, webContents) => {
+    const filePath = path.join(app.getPath('downloads'), item.getFilename());
+    
+    item.setSavePath(filePath);
+    
+    console.log(`[Download] Starting download: ${item.getFilename()}`);
+    console.log(`[Download] URL: ${item.getURL()}`);
+    console.log(`[Download] Saving to: ${filePath}`);
+    console.log(`[Download] Content-Type: ${item.getMimeType()}`);
+    
+    item.on('updated', (event, state) => {
+      if (state === 'interrupted') {
+        console.log('[Download] Download interrupted');
+      } else if (state === 'progressing') {
+        if (item.isPaused()) {
+          console.log('[Download] Download paused');
+        } else {
+          const progress = Math.round((item.getReceivedBytes() / item.getTotalBytes()) * 100);
+          console.log(`[Download] Progress: ${progress}%`);
+        }
+      }
+    });
+    
+    item.on('done', (event, state) => {
+      if (state === 'completed') {
+        console.log(`[Download] Download completed: ${filePath}`);
+        // Show notification when download completes
+        if (Notification.isSupported()) {
+          const notification = new Notification({
+            title: 'Download Complete',
+            body: `${item.getFilename()} has been downloaded to your Downloads folder.`,
+            icon: path.join(__dirname, 'icons', 'icon.png'),
+            silent: false
+          });
+          notification.show();
+        }
+      } else {
+        console.log(`[Download] Download failed: ${state}`);
+        if (Notification.isSupported()) {
+          const notification = new Notification({
+            title: 'Download Failed',
+            body: `Failed to download ${item.getFilename()}.`,
+            icon: path.join(__dirname, 'icons', 'icon.png'),
+            silent: false
+          });
+          notification.show();
+        }
+      }
+    });
+  });
+}
+
 // ----- App lifecycle
 const appStartTime = Date.now();
 app.on('ready', () => {
@@ -622,6 +736,8 @@ app.on('ready', () => {
 });
 
 app.whenReady().then(() => {
+  // Setup download handler before creating windows
+  setupDownloadHandler();
   try {
     console.log('[Startup] Initializing app components...');
     setupProtocolHandlers();
